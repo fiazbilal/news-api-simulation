@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -70,6 +71,41 @@ func TestOffsetResponseOrder(t *testing.T) {
 				"Position %d: Got Provider %v instead of Provider %v",
 				i, item.Source, DefaultConfig[i].Type,
 			)
+		}
+	}
+}
+
+// MockContentProvider is a mock provider that always fails to fetch content
+type MockContentProvider struct {
+	Source Provider
+}
+
+// GetContent always returns an error to simulate a failure
+func (cp MockContentProvider) GetContent(userIP string, count int) ([]*ContentItem, error) {
+	return nil, fmt.Errorf("MockContentProvider: Error fetching content")
+}
+
+func TestFallbackRespected(t *testing.T) {
+	// Create a mock client that always fails to fetch content
+	mockClient := &MockContentProvider{
+		Source: Provider2,
+	}
+
+	// Replace the client for Provider2 with the mock client
+	app.ContentClients[Provider2] = mockClient
+
+	// Perform the request
+	content := runRequest(t, app, SimpleContentRequest)
+
+	// Verify the response
+	if len(content) != 2 {
+		t.Fatalf("Got %d items back, want 2", len(content))
+	}
+
+	// Verify that the response contains items only from Provider1
+	for _, item := range content {
+		if Provider(item.Source) != Provider1 {
+			t.Errorf("Got Provider %v instead of Provider %v", item.Source, Provider1)
 		}
 	}
 }
